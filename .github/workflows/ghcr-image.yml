@@ -1,0 +1,53 @@
+# Fork-only: builds the `deploy` branch (both feature branches merged) and pushes it to GHCR.
+# Not part of any upstream PR. Actions are pinned by commit SHA.
+name: ghcr-image
+
+on:
+  push:
+    branches: [deploy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: VERSION=fork-${{ github.sha }}
+          tags: |
+            ghcr.io/willuhmjs/garage-ui:deploy-${{ github.sha }}
+            ghcr.io/willuhmjs/garage-ui:deploy
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Image"
+            echo "ghcr.io/willuhmjs/garage-ui@${{ steps.build.outputs.digest }}"
+            echo "commit: ${{ github.sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"
